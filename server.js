@@ -5,9 +5,12 @@ const cors = require('cors');
 const app = express();
 const PORT = 3000;
 
+// Enable CORS so the frontend can communicate with this server
 app.use(cors());
+// Parse incoming JSON request bodies
 app.use(express.json());
 
+// Pool manages a collection of database connections for efficiency
 const pool = new Pool({
     user: 'postgres',
     host: 'localhost',
@@ -16,6 +19,7 @@ const pool = new Pool({
     port: 5432
 });
 
+// GET: Retrieve all movies joined with their platform name
 app.get('/api/movies', async (req, res) => {
     try {
         const result = await pool.query(`
@@ -37,12 +41,14 @@ app.get('/api/movies', async (req, res) => {
     }
 });
 
+// GET: Search movies by title using case-insensitive partial match
 app.get('/api/movies/search', async (req, res) => {
     try {
         const { q } = req.query;
         if (!q) {
             return res.status(400).json({ error: 'Search query required' });
         }
+        // $1 is a parameterized placeholder to prevent SQL injection
         const result = await pool.query(
             `SELECT m.movie_id, m.title, m.genre, m.release_year, m.director,
                     p.name AS platform_name
@@ -59,6 +65,7 @@ app.get('/api/movies/search', async (req, res) => {
     }
 });
 
+// GET: Retrieve a specific user's watchlist by joining watchlist, movies, and platforms
 app.get('/api/watchlist/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
@@ -86,6 +93,7 @@ app.get('/api/watchlist/:userId', async (req, res) => {
     }
 });
 
+// GET: Retrieve all users
 app.get('/api/users', async (req, res) => {
     try {
         const result = await pool.query(
@@ -98,6 +106,7 @@ app.get('/api/users', async (req, res) => {
     }
 });
 
+// GET: Retrieve all streaming platforms
 app.get('/api/platforms', async (req, res) => {
     try {
         const result = await pool.query(
@@ -110,9 +119,11 @@ app.get('/api/platforms', async (req, res) => {
     }
 });
 
+// POST: Add a new movie to the database
 app.post('/api/movies', async (req, res) => {
     try {
         const { title, genre, release_year, director, platform_id } = req.body;
+        // Validate that the required field is present
         if (!title) {
             return res.status(400).json({ error: 'Movie title is required' });
         }
@@ -122,6 +133,7 @@ app.post('/api/movies', async (req, res) => {
              RETURNING *`,
             [title, genre, release_year, director, platform_id]
         );
+        // Return the newly created movie with 201 Created status
         res.status(201).json(result.rows[0]);
     } catch (error) {
         console.error('Error adding movie:', error);
@@ -129,6 +141,7 @@ app.post('/api/movies', async (req, res) => {
     }
 });
 
+// POST: Add a movie to a user's watchlist
 app.post('/api/watchlist', async (req, res) => {
     try {
         const { user_id, movie_id, status, rating, notes } = req.body;
@@ -148,6 +161,8 @@ app.post('/api/watchlist', async (req, res) => {
     }
 });
 
+// PUT: Update a watchlist entry's status, rating, and/or notes
+// COALESCE keeps the existing value if no new value is provided
 app.put('/api/watchlist/:watchlistId', async (req, res) => {
     try {
         const { watchlistId } = req.params;
@@ -174,6 +189,7 @@ app.put('/api/watchlist/:watchlistId', async (req, res) => {
     }
 });
 
+// DELETE: Remove a movie from a user's watchlist
 app.delete('/api/watchlist/:watchlistId', async (req, res) => {
     try {
         const { watchlistId } = req.params;
