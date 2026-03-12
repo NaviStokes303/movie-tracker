@@ -210,3 +210,47 @@ app.delete('/api/watchlist/:watchlistId', async (req, res) => {
 app.listen(PORT, () => {
     console.log(`Movie Tracker server running at http://localhost:${PORT}`);
 });
+
+// GET: Recommend movies based on the user's most watched genre
+// Finds the genre the user has watched most, then returns unwatched movies in that genre
+app.get('/api/recommendations/:userId', async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        // Step 1: Find the user's most watched genre by counting watched movies per genre
+        const genreResult = await pool.query(`
+            SELECT m.genre, COUNT(*) as count
+            FROM watchlist w
+            JOIN movies m ON w.movie_id = m.movie_id
+            WHERE w.user_id = $1 AND w.status = 'watched' AND m.genre IS NOT NULL
+            GROUP BY m.genre
+            ORDER BY count DESC
+            LIMIT 1
+        `, [userId]);
+
+        // If user hasn't watched anything yet, return empty
+        if (genreResult.rows.length === 0) {
+            return res.json({ genre: null, recommendations: [] });
+        }
+
+        const topGenre = genreResult.rows[0].genre;
+
+        // Step 2: Find movies in that genre the user hasn't added to their watchlist yet
+        const recsResult = await pool.query(`
+            SELECT m.movie_id, m.title, m.genre, m.release_year, m.director,
+                   p.name AS platform_name
+            FROM movies m
+            LEFT JOIN platforms p ON m.platform_id = p.platform_id
+            WHERE m.genre = $1
+            AND m.movie_id NOT IN (
+                SELECT movie_id FROM watchlist WHERE user_id = $2
+            )
+            ORDER BY m.release_year DESC
+        `, [topGenre, userId]);
+
+        res.json({ genre: topGenre, recommendations: recsResult.rows });
+    } catch (error) {
+        console.error('Error fetching recommendations:', error);
+        res.status(500).json({ error: 'Failed to fetch recommendations' });
+    }
+});
